@@ -17,3 +17,9 @@ fork 한 상태에서 시그널을 보내면 부모와 자식이 모두 시그�
 ---
 shell 에서 $? 으로 exit status를 얻어올 수 있는 이유는, set으로 찾을 수 있는 변수목록에 ?에 저장되기 때문이다.
 printenv등으로 환경변수만 찾아보면 알 수 없는 부분. 이 값은 쉘 자체의 exit status로도 쓰인다.
+
+### set, env in shell
+---
+set은 지역 변수, env는 환경 변수를 보여준다.<br/>
+따라서 a=1형태로 선언한 지역 변수는 set으로만 볼 수 있고, env로는 볼 수 없다.<br/>
+set이 env보다 큰 개념이라고 생각하면 된다. (exit status도 local variable이기 때문에 set으로만 볼 수 있다.)
