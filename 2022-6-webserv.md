@@ -116,20 +116,110 @@ struct kevent {
                     // kevent system의 고유한 결정의 일부일 수 있다)
 };
 ```
+- kevent는 (ident, filter, [udata value]) 쌍으로 식별된다. 이 쌍은 알고싶은 조건들을 특정한다<br/>
+  한 쌍은 주어진 kqueue에서 단 한번만 나타날 수 있다. 주어진 kqueue에 같은 쌍을 등록하려는 후속 시도는,<br/>
+  관찰중인 조건을 대체한다(추가가 아님)<br/>
+  udata value가 쌍에 들어갈지 여부는 kevent의 EV_UDATA_SPECIFIC 플래그로 제어된다
+
+- kevent에서 식별되는 filter는
+  - 이벤트를 처음 등록 시, 이미 존재하는 조건이 있는지 탐지하기 위해 실행되고
+  - 이벤트가 filter에 evaluation되기 위해 전달되면 언제든 실행된다
+
+- filter는 kqueue로부터 kevent를 받으려는 사용자의 시도에서도 실행된다. 만약 filter가 발동된 이벤트가 더이상 갖고있지 않은<br/>
+조건을 나태내면, kevent는 kqueue에서 제거되고 리턴되지 않는다
+
+- filter를 발동하는 다중 이벤트들은 kqueue에 다중으로 kevent가 올라가지 않게 한다.<br/>
+대신, filter는 하나의 struct kevent에 이벤트들을 모으게 된다. fd에 close()호출은 descriptor를 참조하는 모든 kevent들을 제거한다
+
+- kqueue() 시스템콜은 새 kernel event queue를 만들고 descriptor를 반환한다. 이 큐는 child에게 fork로 상속되지 않는다
+
+- kevent() 시스템 콜은 queue에 이벤트들을 등록하기 위해 호출하고, 유저에게 대기중인 이벤트들을 리턴한다.<br/>
+changelist 인자는 kevent배열 포인터다. changelist에 담긴 모든 변화는 queue에서 대기중인 이벤트들을 읽기 전에 적용된다<br/>
+nchanges 인자는 changelist의 크기를 제공한다
+
+- eventlist 인자는 kevent structure의 배열 포인터이다. nevents 인자는 eventlist의 크기를 정한다
+
+- timeout이 non-NULL pointer 일 때, 이벤트를 기다릴 최대 interval을 나타낸다. 이는 struct timespec으로 해석된다<br/>
+만약 timeout이 NULL pointer 이면, kevent는 무기한 대기한다.<br/>
+poll 처럼 사용하기 위해, timeout 인자는 non_NULL이고, zero-valued timespec 구조체를 가르켜야 한다.<br/>
+같은 배열이 changelist와 eventlist에 대해서도 사용될 수 있다
+
+- EV_SET() 매크로는 kevent 구조체의 초기화 편의를 위해 제공된다.
+
 - flags
-  - EV_ADD: kqueue에 이벤트를 추가한다. 존재하는 이벤트를 다시 추가하면 원본 이벤트의 인자를 바꾸고, 중복 entry를 만들지 않는다.<br/> 이벤트를 추가하면, EV_DISABLE flag가 없는 이상, 자동적으로 활성화 된다
+  - EV_ADD: kqueue에 이벤트를 추가한다. 존재하는 이벤트를 다시 추가하면 원본 이벤트의 인자를 바꾸고, 중복 entry를 만들지 않는다.<br/>
+  이벤트를 추가하면, EV_DISABLE flag가 없는 이상, 자동적으로 활성화 된다
   - EV_ENABLE: 이벤트 발생 시 kevent()가 그것을 반환하도록 허용한다
   - EV_DISABLE: kevent()가 반환하지 않도록 이벤트를 비활성화 한다. 필터는 비활성화 되지 않는다
   - EV_DELETE: kqueue에서 이벤트를 제거한다. fd에 연결된 이벤트는 descriptor가 모두 닫히면 자동적으로 삭제된다
-  - EV_RECEIPT: kqueue에 아무 대기중인 이벤트에 draining 하지 않고 대량의 변화를 줄 때 유용하다.<br/>input으로 전달 됐을 때, EV_ERROR가 항상 리턴되도록 강제한다. filter가 성공적으로 추가되면, data filed는 0이 된다
+  - EV_RECEIPT: kqueue에 아무 대기중인 이벤트에 draining 하지 않고 대량의 변화를 줄 때 유용하다.<br/>
+  input으로 전달 됐을 때, EV_ERROR가 항상 리턴되도록 강제한다. filter가 성공적으로 추가되면, data filed는 0이 된다
   - EV_ONESHOT: filter가 발동되는 첫 경우에만 리턴하도록 한다. 사용자가 kqueue에서 이벤트를 받은 후 삭제된다.
-  - EV_CLEAR: 사용자가 이벤트를 받은 후, 해당 상태를 리셋한다. 현재 상태 대신 상태 변화를 알고 싶을 때 유용하다.<br/>일부 fileter들은 내부적으로 이 플래그를 자동 활성화 한다
+  - EV_CLEAR: 사용자가 이벤트를 받은 후, 해당 상태를 리셋한다. 현재 상태 대신 상태 변화를 알고 싶을 때 유용하다.<br/>
+  일부 fileter들은 내부적으로 이 플래그를 자동 활성화 한다
   - EV_EOF: filter-specific eof 조건을 나타내기 위해 사용한다
   - EV_OOBAND: 소켓의 필터를 읽는 경우, out of band 데이터가 descriptor에 존재함을 나태내기 위해 설정한다
   - EV_ERROR: return value 참조
 
 - predefined system filter: filter와 주거나 받는 인자들은 data, fflags를 통해 전달된다
-  - EVFILT_READ: fd르르 식별자로 받고, 읽을 수 있는 데이터가 있으면 반환한다. descriptor type에 따라 조금씩 다르게 행동한다.
-    - Sockets:
-      - listen()에 전달되었던 소켓들은 들어오는 연결이 보류중일 경우 리턴된다. data는 listen backlog의 크기를 담는다
-      - 다른 소켓 descriptor들은 소켓 버퍼의 SO_RCVLOWAT 값에 따라, 읽을 데이터가 있을 때 리턴된다.<br/>이것은 
+  - EVFILT_READ: fd를 식별자로 받고, 읽을 수 있는 데이터가 있으면 반환한다. descriptor type에 따라 조금씩 다르게 행동한다. (socekt, vnode, fifo, pipe, device node 상세 내용은 man 참조)
+  - EVEFILT_EXCEPT: descriptor를 식별자로 받고, 예외 조건이 descriptor에서 발생하면 리턴한다. 조건은 fflags에서<br/>
+  특정한다. NOTE_OOB fileter tag를 사용하는 socket descriptor의 out-of-band 데이터 도착을 모니터링 할 때 사용 가능하다
+  - EVFILT_WRITE: fd를 식별자로 받고, descriptor에 쓰기가 가능할 때 리턴한다.<br/>
+  socket, pipe, fifo에선, data는 write buffer의 남은 양을 담는다. reader가 연결이 끊기면, EV_EOF로 filter가 세팅된다.<br/>
+  fifo의 경우, 이것은 EV_CLEAR로 초기화 할 수 있다.<br/>
+  해당 필터는 vnode를 지원하지 않는다
+  - EVFILT_AIO: 현재 지원 안함
+  - EVFILT_VNODE: fd를 식별자로 받고, fflags의 이벤트들을 살피고 descriptor에서 발생한 한개 이상의 이벤트들을 리턴한다.<br/>
+  아래 이벤트들을 모니터링한다
+    - NOTE_DELETE: unlink() 시스템콜이 descriptor로 참조한 file에 불림
+    - NOTE_WRITE: descriptor로 참조한 file에 쓰기가 발생함
+    - NOTE_EXTEND: descriptor로 참조한 file이 확장됨(extended)
+    - NOTE_ATTRIB: descriptor로 참조한 file의 속성이 변함
+    - NOTE_LINK: fild의 link count가 바뀜
+    - NOTE_RENAME: descriptor로 참조한 file의 이름이 바뀜
+    - NOTE_REVOKE: 파일 접근이 revoke()로 취소되거나, 파일 시스템이 unmount됨
+    - NOTE_FUNLOCK: flock()나 close()를 통해 file이 unlocked 됨
+    - 반환 시, fflags는 이 필터를 통해 관측된 이벤트들에 맞는 filter-specific flag들을 담는다
+  - EVFILT_PROC: monitor의 pid를 식별자로 받고, 추가로 fflags의 관측할 이벤트들을 받는다. 프로세스가 요청된 이벤트들을<br/>
+  한개 이상 실행했을 때 리턴한다. 프로세스가 평범하게 다른 프로세스를 볼 수 있다면, 다른 프로세스에 이벤트를 attach 할 수 있다.<br/>
+  아래 이벤트들을 모니터링 한다
+    - NOTE_EXIT: 프로세스가 종료됨
+    - NOTE_EXITSTATUS: 프로세스가 종료되었고, 그 exit status가 filter specific data에 있다.<br./>
+    자식 프로세스이고, NOTE_EXIT과 같이 사용될 때만 유효하다
+    - NOTE_FORK: 프로세스가 자식 프로세스를 만듦
+    - NOTE_EXEC: 프로세스가 새 프로세스를 실행함
+    - NOTE_SIGNAL: 프로세스가 시그널을 받음
+    - NOTE_REAP: 프로세스가 부모에 의해 수거됨
+    - 반환 시, fflags는 filter를 작동시킨 이벤트가 담긴다
+  - EVFILT_SIGNAL: 모니터링할 시그널 넘버를 식별자로 받고, 프로세스에서 해당 시그널이 발생하면 리턴한다.<br/>
+  signal()과 sigaction() facilities와 공존하고, 낮은 순위를 갖는다. 오직 시그널들이 프로세스로 보내졌을때만 (스레드 아님) filter를 작동시킨다.<br/>
+  필터는 SIG_IGN이 있어도 프로세스에 시그널을 전달하려는 모든 시도들을 기록한다.<br/>
+  이 필터들은 내부적으로 EV_CLEAR flag가 자동으로 적용된다
+  - EVEFILT_MACHPORT: ident의 mach port나 port set의 이름을 받고, 메세지가 port나 port set에서 enqueued 될 때 까지 기다린다.<br/>
+  메세지가 감지되었지만 kevent call에 의해 직접적으로 받지 않았다면, 메세지가 enqueued된 port의 이름이 data에 반환된다.
+  - EVFILT_TIMER: data가 timeout 기간을 특정하는 interval timer을 ident를 통해 식별해서 설정한다<br/>
+  ffags는 아래 플래그 중 하나를 포함할 수 있다 (기본 ms)
+    - NOTE_SECONDS: data is in secnods
+    - NOTE_USECONDS: data is in microsecnods
+    - NOTE_NSECONDS: data is in nanosecnods
+    - NOTE_MACHTIME: data is in Mach abolute time units
+
+    fflags는 EV_ONESHOT 타이머를 interval 대신 절대적인 기한으로 설정하는 NOTE_ABSOLUTE도 포함 가능하다.<br/>
+    절대 기한은 gettimeofday로 표현된다. NOTE_MACHTIME이 있다면, mach_absolute_time()으로 표현된다.<br/>
+    타이머는 power를 아끼기 위해 다른 타이머와 더해질 수 있다. 아래 flags는 이런 행동을 수정하기 위해 사용된다
+      - NOTE_CRITICAL: 기본 power-saving 기술을 여유 값들을 더 엄격하게 지키도록 한다
+      - NOTE_BACKGROUND: 더 많은 power-saving 기술을 다른 타이머와 더하기 위해 사용한다
+
+    타이머는 EV_ONESHOT이 없는 이상 주기적이다. 반환 시, data는 타이머 이벤트의 마지막 arming이나 마지막 전달로부터<br/>
+    몇번이나 timeout이 만료됐는지(expired) 담는다<br/>
+    이 필터들을 EV_CLEAR flag를 자동 설정한다
+
+#### return
+kqueue() 시스템콜은 새 kernel event queue를 만들고 fd를 반환한다. 만들다 에러가 발생했다면, -1을 리턴하고 errno를 설정한다.
+
+kevent() 시스템콜은 eventlist에 위치한 이벤트의 수를 리턴한다 (nevents 이하<br/>
+changelist의 요소를 진행하던 중 에러가 발생하고, eventlist에 충분한 공간이 있다면, 이벤트는 eventlist에 저장 + flags에 EV_ERROR, <br/>
+data에 system error 가 있는 상태로 설정된다. <br/>
+위 경우가 아니면, -1을 리턴하고, errno를 설정한다.<br/>
+만약 time limit이 만료되면, 0을 리턴한다
