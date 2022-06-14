@@ -1,5 +1,13 @@
 # webserv
 
+### 목차
+---
+[1. htonl, htons, ntohl, ntohs](#htonl,-htons,-ntohl,-ntohs)<br/>
+[2. select](#int-select\(int-nfds,-fd_set-*restrict-readfds,-writefds,-errorfds,-struct-timeval-*restirct-timeout\))<br/>
+[3. poll](#poll)<br/>
+[4. kqueue, kevent](#kqueue,-kevent)<br/>
+[5. socket](#socket)<br/>
+
 ### checklist
 ---
 - (select) timeout은 select에 의해 변하지 않고, 후속 호출에서 재사용 가능하지만, 매 select마다 초기화 하는 것이 더 좋다
@@ -9,7 +17,8 @@
 ### 허용 함수
 ---
 
-#### htonl, htons, ntohl, ntohs: 16, 32 bit quantities를 network byte order와 host byte order간 변환
+#### htonl, htons, ntohl, ntohs
+: 16, 32 bit quantities를 network byte order와 host byte order간 변환
 ```c++
 uint32_t htonl(uint32_t hostlong)
 uint16_t htons(uint16_t hosthshort)
@@ -23,7 +32,8 @@ uint16_t ntohs(uint16_t netshrot)
 + 이 루틴들은 gethostbyname과 getservent로 리턴되는 인터넷 주소와 포트와 함께 사용된다
 
 ---
-#### int select(int nfds, fd_set *restrict readfds, writefds, errorfds, struct timeval *restirct timeout)<br/>: 아래 함수들로 리턴되는 I/O descriptor를 테스트 한다
+#### int select(int nfds, fd_set *restrict readfds, writefds, errorfds, struct timeval *restirct timeout)
+: 아래 함수들로 리턴되는 I/O descriptor를 테스트 한다
 - readfds: 읽기가 가능한 fd인지
 - writefds: 쓰기가 가능한 fd인지
 - errorfds: 예외 처리가 필요한 fd인지
@@ -55,7 +65,8 @@ uint16_t ntohs(uint16_t netshrot)
 - ndfs가 FD_SETSIZE보다 크고, _DARWIN_UNLIMITED_SELECT가 정의되지 않았을 때
 ---
 
-#### poll<br/>: fd set이 I/O 가능한지, 혹은 특정 이벤트가 발생했는지 검사한다.
+#### poll
+: fd set이 I/O 가능한지, 혹은 특정 이벤트가 발생했는지 검사한다.
 
 ```c++
 int poll(struct pollfd fds[], ndfs_t nfds, int timeout);
@@ -96,7 +107,8 @@ I/O 가능한 descriptor 수를 리턴한다. 시간 제한이 지난 경우, 0�
 - nfds 인자가 OPEN_MAX보다 크거나, timeout 인자가 -1보다 작음
 
 ---
-### kqueue, kevent: kqueue fd를 할당한다. 이 fd는 사용자에게 filters라고 하는 kernel code 조각을 통해 kernel event(kevent)가 발생 하거나 상태가 유지된 것을 알려준다
+### kqueue, kevent
+: kqueue fd를 할당한다. 이 fd는 사용자에게 filters라고 하는 kernel code 조각을 통해 kernel event(kevent)가 발생 하거나 상태가 유지된 것을 알려준다
 ```c++
 int kqueue(void);<br/>
 int kevent(
@@ -223,3 +235,30 @@ changelist의 요소를 진행하던 중 에러가 발생하고, eventlist에 �
 data에 system error 가 있는 상태로 설정된다. <br/>
 위 경우가 아니면, -1을 리턴하고, errno를 설정한다.<br/>
 만약 time limit이 만료되면, 0을 리턴한다
+
+---
+### socket
+: 통신의 endpoint를 만든다
+
+int socket(int domain, int type, int protocol);
+
+- domain 인자는 통신이 발생할 통신 도메인을 특정한다. 이것은 사용할 protocol family를 선택한다.
+- 이러한 family들은 sys/socket.h에 저의되어 있고, 현재 사용되는 형식은 아래와 같다
+  - PF_LOCAL: Host-internal protocols, PF_UNIX라고 불렸었다
+  - PF_UNIX: PF_LOCAL 사용할 것. deprecated
+  - PF_INET: Internet version 4 protocol
+  - PF_ROUTE: Internal Routing protocol,
+  - PF_KEY: Internal key-management function
+  - PF_INET6: Internet version 6 protocol
+  - PF_SYSTEM: system domain
+  - PF_NDRV: Raw access to network device
+- 소켓은 통신의 semantics를 특정하는 type을 갖는다.
+  - SOCK_STREAM
+    - 순차적, 안정적, 양방향 연결 기반의 바이트 스트림을 제공한다.
+    - 보통 protocol family 중 오직 한개의 프로토콜이 특정 소켓 타입을 지원하기 위해 존재한다
+    - 하지만 여러 프로토콜이 존재할 수 있고, 이 경우 특정 프로토콜은 SOCK_STREAM방식으로 특정되어야 한다
+    - 사용할 protocol number는 통신이 발생할 도메인에 따라 다르다
+    - pipe처럼, full-duplex byte stream이다. stream socket은 데이터를 주고받기 전에 반드시 연결된 상태이어야 한다.
+    - 다른 소켓과의 연결은 connect() 호출로 이루어진다.
+  - SOCK_DGRAM
+  - SOCK_RAW
