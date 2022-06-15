@@ -239,9 +239,9 @@ data에 system error 가 있는 상태로 설정된다. <br/>
 ---
 ### socket
 : 통신의 endpoint를 만든다
-
+```c++
 int socket(int domain, int type, int protocol);
-
+```
 - domain 인자는 통신이 발생할 통신 도메인을 특정한다. 이것은 사용할 protocol family를 선택한다.
 - 이러한 family들은 sys/socket.h에 저의되어 있고, 현재 사용되는 형식은 아래와 같다
   - PF_LOCAL: Host-internal protocols, PF_UNIX라고 불렸었다
@@ -255,10 +255,24 @@ int socket(int domain, int type, int protocol);
 - 소켓은 통신의 semantics를 특정하는 type을 갖는다.
   - SOCK_STREAM
     - 순차적, 안정적, 양방향 연결 기반의 바이트 스트림을 제공한다.
-    - 보통 protocol family 중 오직 한개의 프로토콜이 특정 소켓 타입을 지원하기 위해 존재한다
-    - 하지만 여러 프로토콜이 존재할 수 있고, 이 경우 특정 프로토콜은 SOCK_STREAM방식으로 특정되어야 한다
-    - 사용할 protocol number는 통신이 발생할 도메인에 따라 다르다
+    - out-of-band 데이터 전송 체계가 지원된다.
     - pipe처럼, full-duplex byte stream이다. stream socket은 데이터를 주고받기 전에 반드시 연결된 상태이어야 한다.
     - 다른 소켓과의 연결은 connect() 호출로 이루어진다.
+    - 연결 후, 데이터는 read/write/send/recv로 전송된다.
+    - 세션이 끝난 후, close()해줘야 한다.
+    - out-of-band 데이터도 send와 recv에서 명시된 대로 전송된다
+    - SOCK_STREAM 구현에 사용되는 통신 프로토콜은 데이터가 손실되거나 중복되지 않도록 보장한다
+    - peer 프로토콜의 데이터 조각 버퍼 공간이 합리적인 시간 내에 전송될만큼 공간이 충분하지 않은 경우<br/>
+    연결이 broken으로 취급되고, -1을 에러를 나타내기 위해 리턴하고, ETIMEDOUT으로 errno를 설정한다.
+    - 프로토콜들은 활동이 없는 소켓들을 대략 매 분마다 전송을 강제함으로서 소켓들을 'warm'하게 유지한다
+    - 장기간(5분) 동안 대기 상태에서 응답을 받을 수 없는 경우, 에러이다.
+    - 만약 프로세스가 broken stream에 보내면, SIGPIPE 가 발생한다.<br/>
+      이것은 시그널을 처리하지 않는 안일한 프로세스들을 exit하게 만든다.
   - SOCK_DGRAM
+    - datagram을 지원한다 (connectioinless, (보통 작은)최대 길이가 정해진 불안정한 메세지)
   - SOCK_RAW
+    - 내부 네트워크 프로토콜과 인터페이스로의 접근을 제공한다. 이는 super-user만 사용 가능하다
+  - protocol은 소켓과 사용될 특정 프로토콜을 나타낸다
+  - 보통 protocol family 중 오직 한개의 프로토콜이 특정 소켓 타입을 지원하기 위해 존재한다
+  - 하지만 여러 프로토콜이 존재할 수 있고, 이 경우 특정 프로토콜은 SOCK_STREAM방식으로 특정되어야 한다
+  - 사용할 protocol number는 통신이 발생할 도메인에 따라 다르다
